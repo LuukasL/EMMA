@@ -65,6 +65,18 @@ class TileDownloader:
 
 class TileRequestHandler(BaseHTTPRequestHandler):
     """HTTP request handler for serving map tiles"""
+    def log_request(self, code='-', size='-'):
+        """Suppress request logging"""
+        pass
+
+    def log_message(self, format, *args):
+        """Suppress log messages"""
+        pass
+
+    def log_error(self, format, *args):
+        """Suppress error logging"""
+        pass
+
     def do_GET(self):
         """Handle GET requests for tiles"""
         parts = self.path.split('/')
@@ -149,9 +161,6 @@ class TileRequestHandler(BaseHTTPRequestHandler):
         self.send_response(404)
         self.end_headers()
         self.wfile.write(b'Not found')
-def log_message(self, format, *args):
-    """Suppress log messages"""
-    pass
 
 class LocalTileServer(QThread):
     """Thread for running the local tile server"""

@@ -73,15 +73,6 @@ class MissionControlBanner(SideBanner):
         """)
         mission_buttons_layout.addWidget(self.new_mission_btn)
         
-        self.load_mission_btn = QPushButton("Load")
-        self.load_mission_btn.setStyleSheet("""
-            background-color: #7f8c8d;
-            color: white;
-            padding: 8px;
-            border-radius: 4px;
-        """)
-        mission_buttons_layout.addWidget(self.load_mission_btn)
-        
         self.layout.addLayout(mission_buttons_layout)
         
         mission_type_layout = QFormLayout()
@@ -125,89 +116,7 @@ class MissionControlBanner(SideBanner):
         self.area_size_label.setStyleSheet("color: #bdc3c7;")
         self.layout.addWidget(self.area_size_label)
         
-        # 3. Mission Parameters
-        self.layout.addWidget(SectionHeader("Mission Parameters"))
-        
-        parameters_form = QFormLayout()
-        
-        # Altitude control
-        altitude_layout = QHBoxLayout()
-        self.altitude_slider = QSlider(Qt.Orientation.Horizontal)
-        self.altitude_slider.setRange(10, 120)  # 10m to 120m
-        self.altitude_slider.setValue(30)  # Default 30m
-        self.altitude_slider.setStyleSheet("""
-            background: #2c3e50;
-        """)
-        
-        self.altitude_spin = QSpinBox()
-        self.altitude_spin.setRange(10, 120)
-        self.altitude_spin.setValue(30)
-        self.altitude_spin.setSuffix("m")
-        self.altitude_spin.setStyleSheet("""
-            background-color: #2c3e50;
-            color: white;
-            border: 1px solid #455a64;
-        """)
-        
-        # Connect slider and spinbox
-        self.altitude_slider.valueChanged.connect(self.altitude_spin.setValue)
-        self.altitude_spin.valueChanged.connect(self.altitude_slider.setValue)
-        
-        altitude_layout.addWidget(self.altitude_slider)
-        altitude_layout.addWidget(self.altitude_spin)
-        parameters_form.addRow("Altitude:", altitude_layout)
-        
-        # Speed control
-        speed_layout = QHBoxLayout()
-        self.speed_slider = QSlider(Qt.Orientation.Horizontal)
-        self.speed_slider.setRange(5, 50)  # 5km/h to 50km/h
-        self.speed_slider.setValue(15)  # Default 15km/h
-        
-        self.speed_spin = QSpinBox()
-        self.speed_spin.setRange(5, 50)
-        self.speed_spin.setValue(15)
-        self.speed_spin.setSuffix("km/h")
-        self.speed_spin.setStyleSheet("""
-            background-color: #2c3e50;
-            color: white;
-            border: 1px solid #455a64;
-        """)
-        
-        # Connect slider and spinbox
-        self.speed_slider.valueChanged.connect(self.speed_spin.setValue)
-        self.speed_spin.valueChanged.connect(self.speed_slider.setValue)
-        
-        speed_layout.addWidget(self.speed_slider)
-        speed_layout.addWidget(self.speed_spin)
-        parameters_form.addRow("Speed:", speed_layout)
-        
-        # Duration control
-        self.duration_spin = QSpinBox()
-        self.duration_spin.setRange(5, 120)  # 5min to 120min
-        self.duration_spin.setValue(30)  # Default 30min
-        self.duration_spin.setSuffix("min")
-        self.duration_spin.setStyleSheet("""
-            background-color: #2c3e50;
-            color: white;
-            border: 1px solid #455a64;
-        """)
-        parameters_form.addRow("Duration:", self.duration_spin)
-        
-        # Return threshold control
-        self.return_threshold_spin = QSpinBox()
-        self.return_threshold_spin.setRange(10, 40)  # 10% to 40%
-        self.return_threshold_spin.setValue(20)  # Default 20%
-        self.return_threshold_spin.setSuffix("%")
-        self.return_threshold_spin.setStyleSheet("""
-            background-color: #2c3e50;
-            color: white;
-            border: 1px solid #455a64;
-        """)
-        parameters_form.addRow("Return at:", self.return_threshold_spin)
-        
-        self.layout.addLayout(parameters_form)
-        
-        # 4. Drone Assignment
+        # 3. Drone Assignment
         self.layout.addWidget(SectionHeader("Drone Assignment"))
         
         drone_form = QFormLayout()
@@ -231,7 +140,7 @@ class MissionControlBanner(SideBanner):
         """)
         self.layout.addWidget(self.assign_btn)
         
-        # 5. Execution Controls
+        # 4. Execution Controls
         self.layout.addWidget(SectionHeader("Execution"))
         
         self.validate_btn = QPushButton("Validate Mission")

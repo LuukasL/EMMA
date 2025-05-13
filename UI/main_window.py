@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget,
                              QGroupBox, QFormLayout, QSizePolicy)
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QColor
+from map_widget import MapWidget  
 
 class SectionHeader(QLabel):
     """Custom header for sections in the side banner"""
@@ -19,24 +20,6 @@ class SectionHeader(QLabel):
             padding-bottom: 5px;
         """)
 
-
-class MapWidget(QFrame):
-    """Placeholder for the map widget that will be implemented separately"""
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setFrameShadow(QFrame.Shadow.Raised)
-        self.setStyleSheet("background-color: #2c3e50;")  # Dark blue background as placeholder
-        
-        # Add a label to indicate this is the map area
-        layout = QVBoxLayout(self)
-        label = QLabel("Map View")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        label.setStyleSheet("color: white; font-size: 18px;")
-        layout.addWidget(label)
-        
-        # Ensure minimum size of 800x800 for the map
-        self.setMinimumSize(800, 800)
 class SideBanner(QFrame):
     """Base side banner widget with common styling"""
     def __init__(self, title, parent=None):

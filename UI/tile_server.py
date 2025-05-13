@@ -14,14 +14,24 @@ class TileDownloader:
     def __init__(self, cache_dir):
         self.cache_dir = cache_dir
         # Create cache directory if it doesn't exist
-        os.makedirs(self.cache_dir, exist_ok=True)
+        try:
+            os.makedirs(self.cache_dir, exist_ok=True)
+        except OSError as e:
+            print(f"Error creating cache directory: {e}")
     
     def get_tile_path(self, tile_source, z, x, y):
         """Get the local path for a map tile"""
-        # Create subdirectories for zoom level and x coordinate
-        tile_dir = os.path.join(self.cache_dir, tile_source, str(z), str(x))
-        os.makedirs(tile_dir, exist_ok=True)
-        return os.path.join(tile_dir, f"{y}.png")
+        # Use uppercase for consistency with existing cache
+        if tile_source.lower() == 'topo':
+            tile_source = 'TOPO'
+            
+        try:
+            tile_dir = os.path.join(self.cache_dir, tile_source, str(z), str(x))
+            os.makedirs(tile_dir, exist_ok=True)
+            return os.path.join(tile_dir, f"{y}.png")
+        except OSError as e:
+            print(f"Error creating tile directory: {e}")
+            return None
     
     def download_tile(self, tile_url, tile_path):
         """Download a single tile from the remote server"""
@@ -44,14 +54,20 @@ class TileDownloader:
         """Get a tile from cache or download it if not cached"""
         tile_path = self.get_tile_path(tile_source, z, x, y)
         
+        # Debug print to check paths
+        print(f"Looking for tile at: {tile_path}")
+        
         # If tile exists in cache, return its path
-        if os.path.exists(tile_path):
+        if tile_path and os.path.exists(tile_path):
+            print(f"Found cached tile: {tile_path}")
             return tile_path
         
         # Otherwise download the tile
-        if self.download_tile(tile_url, tile_path):
+        if tile_path and self.download_tile(tile_url, tile_path):
+            print(f"Downloaded tile to: {tile_path}")
             return tile_path
         
+        print(f"Failed to get tile for: z={z}, x={x}, y={y}")
         return None
 
 class TileRequestHandler(BaseHTTPRequestHandler):
@@ -59,11 +75,51 @@ class TileRequestHandler(BaseHTTPRequestHandler):
     
     def do_GET(self):
         """Handle GET requests for tiles"""
-        # Parse the request path to extract tile coordinates
+        print(f"Received request for: {self.path}")  # Debug print
         parts = self.path.split('/')
-        
-        # Check if we're requesting a Leaflet resource
-        if '/leaflet/' in self.path:
+
+        # Handle tile requests
+        if len(parts) >= 5 and parts[1] == 'tiles':
+            try:
+                tile_source = parts[2]
+                z = int(parts[3])
+                x = int(parts[4].split('.')[0])  # Remove any extension
+                y = int(parts[5].split('.')[0])  # Remove any extension
+                
+                # Debug print
+                print(f"Requested tile: source={tile_source}, z={z}, x={x}, y={y}")
+
+                # Construct the remote URL
+                if tile_source.lower() == 'topo':
+                    server = random.choice(['a', 'b', 'c'])
+                    remote_url = f"https://{server}.tile.opentopomap.org/{z}/{x}/{y}.png"
+                    
+                    # Try to get the tile
+                    tile_path = self.server.downloader.get_tile(tile_source, remote_url, z, x, y)
+                    
+                    if tile_path and os.path.exists(tile_path):
+                        self.send_response(200)
+                        self.send_header('Content-type', 'image/png')
+                        self.end_headers()
+                        
+                        with open(tile_path, 'rb') as f:
+                            self.wfile.write(f.read())
+                        return
+                    
+                print(f"Tile not found: {self.path}")
+                self.send_response(404)
+                self.end_headers()
+                return
+                
+            except (ValueError, IndexError) as e:
+                print(f"Error processing tile request: {e}")
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(b'Invalid tile request')
+                return
+
+        # Handle Leaflet resources
+        elif '/leaflet/' in self.path:
             resource_path = self.path.replace('/leaflet/', '')
             local_path = os.path.join(self.server.resource_dir, resource_path)
             
@@ -81,40 +137,34 @@ class TileRequestHandler(BaseHTTPRequestHandler):
                 with open(local_path, 'rb') as f:
                     self.wfile.write(f.read())
                 return
-        
-        # Check if we're requesting a tile
-        elif len(parts) >= 5 and parts[1] == 'tiles':
-            tile_source = parts[2]
-            z = int(parts[3])
-            x = int(parts[4])
-            y = int(parts[5].split('.')[0])  # Remove .png extension
+
+        elif '/leaflet-draw/' in self.path:
+            resource_path = self.path.replace('/leaflet-draw/', '')
+            local_path = os.path.join(self.server.resource_dir, resource_path)
             
-            # Construct the remote URL based on tile source
-            if tile_source == 'topo':
-                # OpenTopoMap
-                server = random.choice(['a', 'b', 'c'])
-                remote_url = f"https://{server}.tile.opentopomap.org/{z}/{x}/{y}.png"
-            
-            # Try to get the tile
-            tile_path = self.server.downloader.get_tile(tile_source, remote_url, z, x, y)
-            
-            if tile_path and os.path.exists(tile_path):
+            if os.path.exists(local_path):
                 self.send_response(200)
-                self.send_header('Content-type', 'image/png')
+                # Set the appropriate content type
+                if local_path.endswith('.js'):
+                    self.send_header('Content-type', 'application/javascript')
+                elif local_path.endswith('.css'):
+                    self.send_header('Content-type', 'text/css')
+                elif local_path.endswith('.png'):
+                    self.send_header('Content-type', 'image/png')
                 self.end_headers()
                 
-                with open(tile_path, 'rb') as f:
+                with open(local_path, 'rb') as f:
                     self.wfile.write(f.read())
                 return
-        
+
         # If we get here, the resource wasn't found
         self.send_response(404)
         self.end_headers()
         self.wfile.write(b'Not found')
     
     def log_message(self, format, *args):
-        """Suppress log messages to console"""
-        pass
+        """Enable logging for debugging"""
+        print(f"TileServer: {format%args}")
 
 class LocalTileServer(QThread):
     """Thread for running the local tile server"""
@@ -153,6 +203,8 @@ class LocalTileServer(QThread):
             except OSError:
                 # Port in use, try the next one
                 continue
+        else:
+            print("Error: No available ports in the range 8080-8100.")
     
     def stop(self):
         """Stop the server"""
@@ -161,3 +213,4 @@ class LocalTileServer(QThread):
             shutdown_thread = threading.Thread(target=self.server.shutdown)
             shutdown_thread.daemon = True
             shutdown_thread.start()
+            shutdown_thread.join()

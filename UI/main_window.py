@@ -51,11 +51,14 @@ class SideBanner(QFrame):
             border-bottom: 1px solid #455a64;
         """)
         self.layout.addWidget(title_label)
+
 class MissionControlBanner(SideBanner):
     """Left side banner with mission planning and control elements"""
     def __init__(self, parent=None):
+        """Initialize the mission control banner with various controls"""
         super().__init__("Mission Control", parent)
-        
+        self.map_widget = MapWidget()
+
         # 1. Mission Selection Section
         self.layout.addWidget(SectionHeader("Mission Setup"))
         
@@ -272,19 +275,15 @@ class MissionControlBanner(SideBanner):
         self.new_mission_btn.clicked.connect(self.on_new_mission)
         self.select_area_btn.clicked.connect(self.on_select_area)
         self.launch_btn.clicked.connect(self.on_launch_mission)
-    
-    # Placeholder slot methods
-    def on_new_mission(self):
-        print("New mission button clicked")
-    
-    def on_select_area(self):
-        print("Select area button clicked")
-        # This would activate drawing mode on the map
-    
-    def on_launch_mission(self):
-        print("Launch mission button clicked")
-        # This would trigger confirmation dialog and then launch
 
+    def on_new_mission(self):
+        print("New mission requested")
+
+    def on_select_area(self):
+        print("Area selection requested")
+
+    def on_launch_mission(self):
+        print("Mission launch requested")
 
 class MainWindow(QMainWindow):
     """Main application window with map-centered layout"""
@@ -293,7 +292,7 @@ class MainWindow(QMainWindow):
         
         # Set window title and initial size
         self.setWindowTitle("Defence Drone Control")
-        self.resize(1200, 800)  # Initial size, will be landscape tablet-appropriate
+        self.resize(1200, 800)
         
         # Create central widget with horizontal layout
         central_widget = QWidget()
@@ -301,18 +300,18 @@ class MainWindow(QMainWindow):
         
         # Create horizontal layout for the three main sections
         main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins for maximum space
-        main_layout.setSpacing(0)  # Remove spacing between elements
-        
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
         # Create left banner with mission controls
-        self.left_banner = MissionControlBanner()
+        self.left_banner = MissionControlBanner(parent=self)
         main_layout.addWidget(self.left_banner)
         
-        # Create central map widget (keeping the placeholder from before)
+        # Create the map widget
         self.map_widget = MapWidget()
         main_layout.addWidget(self.map_widget)
         
-        # Create right banner (keeping this simple for now)
+        # Create right banner
         self.right_banner = SideBanner("Drone Status")
         main_layout.addWidget(self.right_banner)
         
@@ -331,12 +330,18 @@ class MainWindow(QMainWindow):
                 border: 1px solid #455a64;
             }
         """)
-    
+
     def resizeEvent(self, event):
         """Handle window resize to maintain layout proportions"""
         super().resizeEvent(event)
-        # Log current size for debugging
         print(f"Window resized to: {self.width()}x{self.height()}")
+
+    def closeEvent(self, event):
+        """Handle application close event"""
+        if hasattr(self.map_widget, 'tile_server'):
+            self.map_widget.tile_server.stop()
+            self.map_widget.tile_server.wait()
+        super().closeEvent(event)
 
 # For testing the layout
 if __name__ == "__main__":
@@ -346,13 +351,3 @@ if __name__ == "__main__":
     sys.exit(app.exec())
 
 
-
-
-def closeEvent(self, event):
-    """Handle application close event"""
-    # Clean up resources
-    if hasattr(self.map_widget, 'tile_server'):
-        self.map_widget.tile_server.stop()
-        self.map_widget.tile_server.wait()
-    
-    super().closeEvent(event)

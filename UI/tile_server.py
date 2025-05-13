@@ -49,33 +49,24 @@ class TileDownloader:
         except urllib.error.URLError as e:
             print(f"Error downloading tile: {e}")
             return False
-    
     def get_tile(self, tile_source, tile_url, z, x, y):
         """Get a tile from cache or download it if not cached"""
         tile_path = self.get_tile_path(tile_source, z, x, y)
         
-        # Debug print to check paths
-        print(f"Looking for tile at: {tile_path}")
-        
         # If tile exists in cache, return its path
         if tile_path and os.path.exists(tile_path):
-            print(f"Found cached tile: {tile_path}")
             return tile_path
         
         # Otherwise download the tile
         if tile_path and self.download_tile(tile_url, tile_path):
-            print(f"Downloaded tile to: {tile_path}")
             return tile_path
         
-        print(f"Failed to get tile for: z={z}, x={x}, y={y}")
         return None
 
 class TileRequestHandler(BaseHTTPRequestHandler):
     """HTTP request handler for serving map tiles"""
-    
     def do_GET(self):
         """Handle GET requests for tiles"""
-        print(f"Received request for: {self.path}")  # Debug print
         parts = self.path.split('/')
 
         # Handle tile requests
@@ -85,9 +76,6 @@ class TileRequestHandler(BaseHTTPRequestHandler):
                 z = int(parts[3])
                 x = int(parts[4].split('.')[0])  # Remove any extension
                 y = int(parts[5].split('.')[0])  # Remove any extension
-                
-                # Debug print
-                print(f"Requested tile: source={tile_source}, z={z}, x={x}, y={y}")
 
                 # Construct the remote URL
                 if tile_source.lower() == 'topo':
@@ -161,10 +149,9 @@ class TileRequestHandler(BaseHTTPRequestHandler):
         self.send_response(404)
         self.end_headers()
         self.wfile.write(b'Not found')
-    
-    def log_message(self, format, *args):
-        """Enable logging for debugging"""
-        print(f"TileServer: {format%args}")
+def log_message(self, format, *args):
+    """Suppress log messages"""
+    pass
 
 class LocalTileServer(QThread):
     """Thread for running the local tile server"""

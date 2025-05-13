@@ -344,3 +344,15 @@ if __name__ == "__main__":
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
+
+
+
+
+def closeEvent(self, event):
+    """Handle application close event"""
+    # Clean up resources
+    if hasattr(self.map_widget, 'tile_server'):
+        self.map_widget.tile_server.stop()
+        self.map_widget.tile_server.wait()
+    
+    super().closeEvent(event)

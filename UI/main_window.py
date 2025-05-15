@@ -1,11 +1,13 @@
-import sys
+import os
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, 
                              QHBoxLayout, QVBoxLayout, QFrame, QLabel,
                              QPushButton, QComboBox, QSlider, QSpinBox,
-                             QGroupBox, QFormLayout, QSizePolicy)
+                             QGroupBox, QFormLayout, QSizePolicy, QFileDialog)
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QColor
 from map_widget import MapWidget  
+import sys
+
 
 class SectionHeader(QLabel):
     """Custom header for sections in the side banner"""
@@ -58,6 +60,7 @@ class MissionControlBanner(SideBanner):
         """Initialize the mission control banner with various controls"""
         super().__init__("Mission Control", parent)
         self.map_widget = MapWidget()
+        self.draw_mode_active = False
 
         # 1. Mission Selection Section
         self.layout.addWidget(SectionHeader("Mission Setup"))
@@ -186,15 +189,124 @@ class MissionControlBanner(SideBanner):
         self.launch_btn.clicked.connect(self.on_launch_mission)
 
         # Draw mode toggle
-        self.draw_mode_active = False
-
         self.select_area_btn.clicked.connect(self.toggle_draw_mode)
+        # Add save/load buttons to the Mission Setup section
+        mission_file_layout = QHBoxLayout()
+        
+        self.save_mission_btn = QPushButton("Save")
+        self.save_mission_btn.setStyleSheet("""
+            background-color: #f39c12;
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+        """)
+        self.save_mission_btn.clicked.connect(self.save_mission)
+        mission_file_layout.addWidget(self.save_mission_btn)
+        
+        self.load_mission_btn = QPushButton("Load")
+        self.load_mission_btn.setStyleSheet("""
+            background-color: #3498db;
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+        """)
+        self.load_mission_btn.clicked.connect(self.load_mission)
+        mission_file_layout.addWidget(self.load_mission_btn)
+        
+        # Add this layout after the mission_buttons_layout
+        self.layout.addLayout(mission_file_layout)
+        
+        # Update area info when areas change
+        if parent and hasattr(parent, 'map_widget'):
+            parent.map_widget.area_manager.area_added.connect(self.update_area_info)
+            parent.map_widget.area_manager.area_modified.connect(self.update_area_info)
+            parent.map_widget.area_manager.area_removed.connect(self.update_area_info)
+            parent.map_widget.area_manager.area_selected.connect(self.update_selected_area_info)
+    
+    def update_area_info(self):
+        """Update the area information display"""
+        if self.parent() and hasattr(self.parent(), 'map_widget'):
+            area_manager = self.parent().map_widget.area_manager
+            num_areas = len(area_manager.areas)
+            
+            if num_areas == 0:
+                self.area_size_label.setText("Area: Not selected")
+            else:
+                total_area = sum(area.get_area_km2() for area in area_manager.areas.values())
+                self.area_size_label.setText(f"Areas: {num_areas} (Total: {total_area:.2f} km²)")
+    
+    def update_selected_area_info(self, area_id):
+        """Update information about the selected area"""
+        if not self.parent() or not hasattr(self.parent(), 'map_widget'):
+            return
+            
+        area_manager = self.parent().map_widget.area_manager
+        selected_area = area_manager.get_selected_area()
+        
+        if selected_area:
+            area_size = selected_area.get_area_km2()
+            self.area_size_label.setText(f"Selected: {selected_area.name} ({area_size:.2f} km²)")
+        else:
+            self.update_area_info()  # Fall back to showing overall stats
+    
+    def save_mission(self):
+        """Save the current mission areas to a file"""
+        if not self.parent() or not hasattr(self.parent(), 'map_widget'):
+            return
+            
+        # Create missions directory if it doesn't exist
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        missions_dir = os.path.join(app_dir, 'mission_areas')
+        os.makedirs(missions_dir, exist_ok=True)
+        
+        # Open file dialog
+        file_path, _ = QFileDialog.getSaveFileName(
+            self.parent(),
+            "Save Mission",
+            missions_dir,
+            "Mission Files (*.json)"
+        )
+        
+        if file_path:
+            success = self.parent().map_widget.area_manager.save_to_file(file_path)
+            if success:
+                print(f"Mission saved to {file_path}")
+            else:
+                print("Failed to save mission")
+    
+    def load_mission(self):
+        """Load mission areas from a file"""
+        if not self.parent() or not hasattr(self.parent(), 'map_widget'):
+            return
+            
+        # Open file dialog
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        missions_dir = os.path.join(app_dir, 'mission_areas')
+        
+        file_path, _ = QFileDialog.getOpenFileName(
+            self.parent(),
+            "Load Mission",
+            missions_dir,
+            "Mission Files (*.json)"
+        )
+        
+        if file_path:
+            success = self.parent().map_widget.area_manager.load_from_file(file_path)
+            if success:
+                print(f"Mission loaded from {file_path}")
+                self.update_area_info()
+            else:
+                print("Failed to load mission")
 
     def on_new_mission(self):
         print("New mission requested")
 
     def on_select_area(self):
         print("Area selection requested")
+        print("Will now call toggle_draw_mode")
+        self.toggle_draw_mode()
+        print("toggle_draw_mode called")
+
 
     def on_launch_mission(self):
         print("Mission launch requested")
@@ -248,6 +360,14 @@ class MainWindow(QMainWindow):
         
         # Create the map widget
         self.map_widget = MapWidget()
+
+        # Set location
+        self.map_widget = MapWidget(
+            parent=self,
+            initial_lat=64.185717,
+            initial_lon=27.704128,
+            initial_zoom=15
+        )
         main_layout.addWidget(self.map_widget)
         
         # Create right banner
@@ -269,7 +389,8 @@ class MainWindow(QMainWindow):
                 border: 1px solid #455a64;
             }
         """)
-
+        
+        
     def resizeEvent(self, event):
         """Handle window resize to maintain layout proportions"""
         super().resizeEvent(event)

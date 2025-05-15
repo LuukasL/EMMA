@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Drone Control Map</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="http://localhost:{{SERVER_PORT}}/leaflet/leaflet.css" />
+    <script src="http://localhost:{{SERVER_PORT}}/leaflet/leaflet.js"></script>
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { width: 100%; height: 100vh; background: #2c3e50; }
+        .draw-mode-active { cursor: crosshair; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        console.log("Map initialization starting");
+          // Initialize the map
+        var map = L.map('map').setView([INITIAL_LAT_PLACEHOLDER, INITIAL_LON_PLACEHOLDER], INITIAL_ZOOM_PLACEHOLDER);
+        L.tileLayer('http://localhost:{{SERVER_PORT}}/tiles/TOPO/{z}/{x}/{y}.png').addTo(map);
+        
+        // Store map objects
+        window.drawnAreas = {};
+        
+        // These variables will be used by the JS files loaded later
+        var drawMode = false;
+        var drawStart = null;
+        var currentRectangle = null;
+        
+        console.log("Map base initialization complete");
+    </script>
+</body>
+</html>

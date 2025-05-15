@@ -16,19 +16,20 @@ This project develops a custom control interface for autonomous defense drones b
 ## System Requirements
 
 ### Development Environment
+
 - Python 3.8+
 - PyQt6
 - ArduPilot development environment (included as submodule)
 
 ### Deployment Environment
+
 - Tablet device (7-9 inch) with minimum 1200×800 resolution
 - Linux OS
 - Connection hardware for drone communication
 
-
 ### Drone Configuration
 
-*Documentation for configuring compatible drones will be added as the project progresses.*
+_Documentation for configuring compatible drones will be added as the project progresses._
 
 ## Project Structure
 
@@ -44,7 +45,7 @@ Current development phase: **Initial Prototype**
 
 - [x] Basic application structure
 - [x] Mission control interface
-- [ ] Map integration
+- [x] Map integration
 - [ ] ArduPilot command translation
 - [ ] Simulated mission testing
 - [ ] Physical drone testing
@@ -52,18 +53,21 @@ Current development phase: **Initial Prototype**
 ## Roadmap
 
 ### Phase 1: MVP (Q2 2025) Before and during San Francisco trip
+
 - Complete basic mission planning interface
 - Implement GPS-based autonomous patrol capabilities
 - Test with simulated environment (SITL)
 - Initial field testing with physical drone
 
 ### Phase 2: Enhanced Capabilities (Q3 2025)
+
 - Multiple drone coordination
 - Advanced mission templates
 - Performance optimization for cold weather
 - Integration with military coordinate systems
 
 ### Phase 3: Advanced Navigation (Q4 2025)
+
 - Computer vision-based navigation research
 - Integration with Finnish terrain data
 - GPS-denied operation capabilities
@@ -72,6 +76,7 @@ Current development phase: **Initial Prototype**
 ## Military Use Considerations
 
 This system is designed specifically for defense applications and contains features optimized for military use cases. Operation should comply with:
+
 - Finnish military regulations
 - NATO interoperability standards
 - Relevant export control regulations
@@ -83,6 +88,6 @@ This system is designed specifically for defense applications and contains featu
 
 ## License
 
-*Proprietary - All rights reserved*
+_Proprietary - All rights reserved_
 
-*ArduPilot is used under its respective license terms.*
+_ArduPilot is used under its respective license terms._

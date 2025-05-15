@@ -17,11 +17,11 @@ class MapWidget(QFrame):
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setFrameShadow(QFrame.Shadow.Raised)
 
-
         # Store initial map position
         self.initial_lat = initial_lat
         self.initial_lon = initial_lon
         self.initial_zoom = initial_zoom
+        
 
         # Create area manager
         self.area_manager = AreaManager(self)

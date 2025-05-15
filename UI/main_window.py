@@ -185,6 +185,11 @@ class MissionControlBanner(SideBanner):
         self.select_area_btn.clicked.connect(self.on_select_area)
         self.launch_btn.clicked.connect(self.on_launch_mission)
 
+        # Draw mode toggle
+        self.draw_mode_active = False
+
+        self.select_area_btn.clicked.connect(self.toggle_draw_mode)
+
     def on_new_mission(self):
         print("New mission requested")
 
@@ -193,6 +198,31 @@ class MissionControlBanner(SideBanner):
 
     def on_launch_mission(self):
         print("Mission launch requested")
+
+    def toggle_draw_mode(self):
+        """Toggle drawing mode on/off"""
+        self.draw_mode_active = not self.draw_mode_active
+
+        if self.draw_mode_active:
+            self.select_area_btn.setStyleSheet("""
+                background-color: #e74c3c;
+                color: white;
+                padding: 8px;
+                border-radius: 4px;
+            """)
+            self.select_area_btn.setText("Cancel Selection")
+        else:
+            self.select_area_btn.setStyleSheet("""
+                background-color: #27ae60;
+                color: white;
+                padding: 8px;
+                border-radius: 4px;
+            """)
+            self.select_area_btn.setText("Select Area")
+
+        # Notify the map widget to toggle draw mode
+        if self.parent() and hasattr(self.parent(), 'map_widget'):
+            self.parent().map_widget.toggle_draw_mode(self.draw_mode_active)
 
 class MainWindow(QMainWindow):
     """Main application window with map-centered layout"""

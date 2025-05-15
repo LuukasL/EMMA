@@ -57,6 +57,22 @@ class MapWidget(QFrame):
         self.tile_server.server_started.connect(self.on_server_started)
         self.tile_server.start()
 
+        # Drawing mode initialization
+        self.draw_mode_active = False
+    
+    def toggle_draw_mode(self, enabled):
+        """Enable or disable drawing mode"""
+        self.draw_mode_active = enabled
+
+        if enabled:
+            self.setStyleSheet("border: 3px solid #27ae60;")
+        else:
+            self.setStyleSheet("")
+
+        if hasattr(self, 'web_view'):
+            js_code = f"setDrawMode({'true' if enabled else 'false'});"
+            self.web_view.page().runJavaScript(js_code)
+
     def on_server_started(self, port):
         """Called when the local tile server is ready"""
         if not port:

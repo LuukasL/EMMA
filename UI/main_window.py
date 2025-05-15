@@ -1,10 +1,8 @@
 import os
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, 
                              QHBoxLayout, QVBoxLayout, QFrame, QLabel,
-                             QPushButton, QComboBox, QSlider, QSpinBox,
-                             QGroupBox, QFormLayout, QSizePolicy, QFileDialog)
-from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QColor
+                             QPushButton, QComboBox, QFormLayout, QFileDialog)
+from PyQt6.QtCore import Qt
 from map_widget import MapWidget  
 import sys
 
@@ -102,6 +100,7 @@ class MissionControlBanner(SideBanner):
             padding: 8px;
             border-radius: 4px;
         """)
+        self.select_area_btn.clicked.connect(self.toggle_area_selection)
         area_buttons_layout.addWidget(self.select_area_btn)
         
         self.clear_selection_btn = QPushButton("Clear")
@@ -183,141 +182,32 @@ class MissionControlBanner(SideBanner):
         # Add a spacer at the bottom to push everything up
         self.layout.addStretch()
         
-        # Connect signals to slots (placeholder functions for now)
-        self.new_mission_btn.clicked.connect(self.on_new_mission)
-        self.select_area_btn.clicked.connect(self.on_select_area)
-        self.launch_btn.clicked.connect(self.on_launch_mission)
+        self.drawing_status_label = QLabel("")
+        self.drawing_status_label.setStyleSheet("""
+            color: #e74c3c;
+            font-weight: bold;
+            padding: 5px;
+            background-color: #2c3e50;
+            border-radius: 3px;
+        """)
+        self.drawing_status_label.setVisible(False)
+        self.layout.addWidget(self.drawing_status_label)
 
-        # Draw mode toggle
-        self.select_area_btn.clicked.connect(self.toggle_draw_mode)
-        # Add save/load buttons to the Mission Setup section
-        mission_file_layout = QHBoxLayout()
-        
-        self.save_mission_btn = QPushButton("Save")
-        self.save_mission_btn.setStyleSheet("""
-            background-color: #f39c12;
-            color: white;
-            padding: 8px;
-            border-radius: 4px;
-        """)
-        self.save_mission_btn.clicked.connect(self.save_mission)
-        mission_file_layout.addWidget(self.save_mission_btn)
-        
-        self.load_mission_btn = QPushButton("Load")
-        self.load_mission_btn.setStyleSheet("""
-            background-color: #3498db;
-            color: white;
-            padding: 8px;
-            border-radius: 4px;
-        """)
-        self.load_mission_btn.clicked.connect(self.load_mission)
-        mission_file_layout.addWidget(self.load_mission_btn)
-        
-        # Add this layout after the mission_buttons_layout
-        self.layout.addLayout(mission_file_layout)
-        
-        # Update area info when areas change
         if parent and hasattr(parent, 'map_widget'):
-            parent.map_widget.area_manager.area_added.connect(self.update_area_info)
-            parent.map_widget.area_manager.area_modified.connect(self.update_area_info)
-            parent.map_widget.area_manager.area_removed.connect(self.update_area_info)
-            parent.map_widget.area_manager.area_selected.connect(self.update_selected_area_info)
-    
-    def update_area_info(self):
-        """Update the area information display"""
-        if self.parent() and hasattr(self.parent(), 'map_widget'):
-            area_manager = self.parent().map_widget.area_manager
-            num_areas = len(area_manager.areas)
-            
-            if num_areas == 0:
-                self.area_size_label.setText("Area: Not selected")
-            else:
-                total_area = sum(area.get_area_km2() for area in area_manager.areas.values())
-                self.area_size_label.setText(f"Areas: {num_areas} (Total: {total_area:.2f} km²)")
-    
-    def update_selected_area_info(self, area_id):
-        """Update information about the selected area"""
-        if not self.parent() or not hasattr(self.parent(), 'map_widget'):
-            return
-            
-        area_manager = self.parent().map_widget.area_manager
-        selected_area = area_manager.get_selected_area()
-        
-        if selected_area:
-            area_size = selected_area.get_area_km2()
-            self.area_size_label.setText(f"Selected: {selected_area.name} ({area_size:.2f} km²)")
+            parent.map_widget.pointAdded.connect(self.on_point_added)
+            parent.map_widget.rectangleCompleted.connect(self.on_rectangle_completed)
+
+
+    def toggle_area_selection(self):
+        """Toggle the area selection mode on or off"""
+        if hasattr(self, 'draw_mode_active'):
+            self.draw_mode_active = not self.draw_mode_active
         else:
-            self.update_area_info()  # Fall back to showing overall stats
-    
-    def save_mission(self):
-        """Save the current mission areas to a file"""
-        if not self.parent() or not hasattr(self.parent(), 'map_widget'):
-            return
-            
-        # Create missions directory if it doesn't exist
-        app_dir = os.path.dirname(os.path.abspath(__file__))
-        missions_dir = os.path.join(app_dir, 'mission_areas')
-        os.makedirs(missions_dir, exist_ok=True)
-        
-        # Open file dialog
-        file_path, _ = QFileDialog.getSaveFileName(
-            self.parent(),
-            "Save Mission",
-            missions_dir,
-            "Mission Files (*.json)"
-        )
-        
-        if file_path:
-            success = self.parent().map_widget.area_manager.save_to_file(file_path)
-            if success:
-                print(f"Mission saved to {file_path}")
-            else:
-                print("Failed to save mission")
-    
-    def load_mission(self):
-        """Load mission areas from a file"""
-        if not self.parent() or not hasattr(self.parent(), 'map_widget'):
-            return
-            
-        # Open file dialog
-        app_dir = os.path.dirname(os.path.abspath(__file__))
-        missions_dir = os.path.join(app_dir, 'mission_areas')
-        
-        file_path, _ = QFileDialog.getOpenFileName(
-            self.parent(),
-            "Load Mission",
-            missions_dir,
-            "Mission Files (*.json)"
-        )
-        
-        if file_path:
-            success = self.parent().map_widget.area_manager.load_from_file(file_path)
-            if success:
-                print(f"Mission loaded from {file_path}")
-                self.update_area_info()
-            else:
-                print("Failed to load mission")
-
-    def on_new_mission(self):
-        print("New mission requested")
-
-    def on_select_area(self):
-        print("Area selection requested")
-        print("Will now call toggle_draw_mode")
-        self.toggle_draw_mode()
-        print("toggle_draw_mode called")
-
-
-    def on_launch_mission(self):
-        print("Mission launch requested")
-
-    def toggle_draw_mode(self):
-        """Toggle drawing mode on/off"""
-        self.draw_mode_active = not self.draw_mode_active
+            self.draw_mode_active = True
 
         if self.draw_mode_active:
             self.select_area_btn.setStyleSheet("""
-                background-color: #e74c3c;
+                background-color: #c0392b;
                 color: white;
                 padding: 8px;
                 border-radius: 4px;
@@ -331,10 +221,26 @@ class MissionControlBanner(SideBanner):
                 border-radius: 4px;
             """)
             self.select_area_btn.setText("Select Area")
-
-        # Notify the map widget to toggle draw mode
         if self.parent() and hasattr(self.parent(), 'map_widget'):
             self.parent().map_widget.toggle_draw_mode(self.draw_mode_active)
+    
+    def on_point_added(self, point_num, lat, lon):
+        """Update the UI when a point is added to the drawing"""
+        self.drawing_status_label.setText(f"Point {point_num} added at {lat:.6f}, {lon:.6f}")
+        self.drawing_status_label.setVisible(True)
+    
+    def on_rectangle_completed(self, rectangle):
+        """Update the UI when a rectangle is completed"""
+        width = rectangle['dimensions']['width_km']
+        height = rectangle['dimensions']['height_km']
+        area = width * height
+        
+        # Show area information
+        self.area_size_label.setText(f"Area: {area:.2f} km² ({width:.1f} × {height:.1f} km)")
+        
+        # Clear drawing status
+        self.drawing_status_label.setVisible(False)
+
 
 class MainWindow(QMainWindow):
     """Main application window with map-centered layout"""

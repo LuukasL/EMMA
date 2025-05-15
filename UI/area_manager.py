@@ -3,7 +3,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot, QPointF, QRectF
 import uuid
 import json
 import math
-
+import time
 
 class MissionArea:
     """
@@ -126,125 +126,102 @@ class AreaManager(QObject):
         # Currently selected area ID, or None if no selection
         self.selected_area_id = None
     
-    def add_area(self, area=None, bounds=None):
-        """
-        Add a new area to the manager.
+    def add_area(self, bounds=None, name=None, area_type="patrol"):
+        """Add a new area with the given bounds and properties"""
+        area_id = f"area_{len(self.areas) + 1}_{int(time.time())}"
         
-        Args:
-            area (MissionArea, optional): Area object to add. If None, a new one is created.
-            bounds (list, optional): If area is None, these bounds are used for the new area.
-            
-        Returns:
-            str: ID of the new or added area
-        """
-        if area is None:
-            area = MissionArea(bounds=bounds)
+        if name is None:
+            name = f"Area {len(self.areas) + 1}"
         
-        # Add the area to our dictionary
-        self.areas[area.id] = area
-        
-        # Emit signal to notify observers
-        self.area_added.emit(area.id)
-        
-        return area.id
-    
-    def get_area(self, area_id):
-        """Get an area by ID."""
-        return self.areas.get(area_id)
-    
-    def get_all_areas(self):
-        """Get all areas as a list."""
-        return list(self.areas.values())
-    
-    def update_area(self, area_id, bounds=None, name=None, metadata=None):
-        """Update an existing area's properties."""
-        area = self.areas.get(area_id)
-        if not area:
-            return False
-        
-        if bounds:
-            area.bounds = bounds
-        
-        if name:
-            area.name = name
-            
-        if metadata:
-            area.metadata.update(metadata)
-        
-        # Emit signal to notify observers
-        self.area_modified.emit(area_id)
-        
-        return True
-    
-    def remove_area(self, area_id):
-        """Remove an area by ID."""
-        if area_id in self.areas:
-            del self.areas[area_id]
-            
-            # If we removed the selected area, clear the selection
-            if self.selected_area_id == area_id:
-                self.selected_area_id = None
-            
-            # Emit signal to notify observers
-            self.area_removed.emit(area_id)
-            
-            return True
-        return False
-    
-    def select_area(self, area_id):
-        """Select an area by ID."""
-        if area_id in self.areas or area_id is None:
-            self.selected_area_id = area_id
-            self.area_selected.emit(area_id if area_id else "")
-            return True
-        return False
-    
-    def get_selected_area(self):
-        """Get the currently selected area."""
-        if self.selected_area_id:
-            return self.areas.get(self.selected_area_id)
-        return None
-    
-    def clear_all_areas(self):
-        """Remove all areas."""
-        area_ids = list(self.areas.keys())
-        for area_id in area_ids:
-            self.remove_area(area_id)
-    
-    def save_to_file(self, filename):
-        """Save all areas to a JSON file."""
-        data = {
-            "areas": [area.to_dict() for area in self.areas.values()]
+        Area = {
+            "id": area_id,
+            "name": name,
+            "type": area_type,
+            "bounds": bounds,
+            "created": time.time(),
+            "modified": time.time()
         }
         
+        self.areas[area_id] = Area(area_id, name, bounds, area_type)
+        self.area_added.emit(area_id)
+        
+        return area_id
+    
+    def save_to_file(self, file_path):
+        """Save all areas to a JSON file"""
         try:
-            with open(filename, 'w') as f:
-                json.dump(data, f, indent=2)
+            # Prepare data for JSON serialization
+            areas_data = {}
+            for area_id, area in self.areas.items():
+                areas_data[area_id] = {
+                    "id": area.id,
+                    "name": area.name,
+                    "type": area.type,
+                    "bounds": area.bounds,
+                    "center": [
+                        (area.bounds[0][0] + area.bounds[1][0]) / 2,
+                        (area.bounds[0][1] + area.bounds[1][1]) / 2
+                    ],
+                    "dimensions": {
+                        "width_km": self.calculate_width_km(area.bounds),
+                        "height_km": self.calculate_height_km(area.bounds)
+                    }
+                }
+            
+            # Save to file
+            with open(file_path, 'w') as f:
+                json.dump(areas_data, f, indent=2)
+                
             return True
         except Exception as e:
             print(f"Error saving areas: {e}")
             return False
+
+
+    def calculate_width_km(self, bounds):
+        """Calculate width of bounds in kilometers"""
+        from math import sin, cos, sqrt, atan2, radians
+        
+        # Use southwest and southeast corners
+        lat1, lon1 = bounds[0][0], bounds[0][1]  # Southwest
+        lat2, lon2 = bounds[0][0], bounds[1][1]  # Southeast
+        
+        # Approximate radius of earth in km
+        R = 6371.0
+        
+        lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+        
+        dlon = lon2 - lon1
+        dlat = lat2 - lat1
+        
+        a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
+        c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        
+        distance = R * c
+        return distance
     
-    def load_from_file(self, filename):
-        """Load areas from a JSON file."""
-        try:
-            with open(filename, 'r') as f:
-                data = json.load(f)
-            
-            # Clear existing areas
-            self.clear_all_areas()
-            
-            # Create areas from the loaded data
-            for area_data in data.get("areas", []):
-                area = MissionArea.from_dict(area_data)
-                self.add_area(area)
-                
-            return True
-        except Exception as e:
-            print(f"Error loading areas: {e}")
-            return False
-
-
+    def calculate_height_km(self, bounds):
+        """Calculate height of bounds in kilometers"""
+        from math import sin, cos, sqrt, atan2, radians
+        
+        # Use southwest and northwest corners
+        lat1, lon1 = bounds[0][0], bounds[0][1]  # Southwest
+        lat2, lon2 = bounds[1][0], bounds[0][1]  # Northwest
+        
+        # Approximate radius of earth in km
+        R = 6371.0
+        
+        lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+        
+        dlon = lon2 - lon1
+        dlat = lat2 - lat1
+        
+        a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
+        c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        
+        distance = R * c
+        return distance
+    
 class MapBridge(QObject):
     """
     Bridge between Python and JavaScript for map operations.
@@ -262,93 +239,20 @@ class MapBridge(QObject):
     # Signal to control drawing mode
     drawingModeChanged = pyqtSignal(bool)  # is_enabled
     
-    def __init__(self, area_manager, parent=None):
+    def __init__(self, area_manager, map_widget):
         """
         Initialize the map bridge.
-        
-        Args:
-            area_manager (AreaManager): Reference to the application's area manager
-            parent (QObject, optional): Parent object
         """
-        super().__init__(parent)
+        super().__init__()
         self.area_manager = area_manager
-        
-        # Connect to area manager signals
-        self.area_manager.area_added.connect(self._on_area_added)
-        self.area_manager.area_modified.connect(self._on_area_modified)
-        self.area_manager.area_removed.connect(self._on_area_removed)
-        self.area_manager.area_selected.connect(self._on_area_selected)
-    
-    @pyqtSlot(list)
-    def addArea(self, bounds):
-        """Add a new area with the given bounds. Called from JavaScript."""
-        area_id = self.area_manager.add_area(bounds=bounds)
-        return area_id
-    
-    @pyqtSlot(str, list)
-    def updateArea(self, area_id, bounds):
-        """Update an area's bounds. Called from JavaScript."""
-        success = self.area_manager.update_area(area_id, bounds=bounds)
-        return success
-    
-    @pyqtSlot(str)
-    def removeArea(self, area_id):
-        """Remove an area. Called from JavaScript."""
-        success = self.area_manager.remove_area(area_id)
-        return success
-    
-    @pyqtSlot(str)
-    def selectArea(self, area_id):
-        """Select an area. Called from JavaScript."""
-        if area_id == "":
-            area_id = None
-        success = self.area_manager.select_area(area_id)
-        return success
-    
-    @pyqtSlot(result='QVariantList')
-    def getAllAreas(self):
-        """Get all areas. Called from JavaScript."""
-        areas = []
-        for area in self.area_manager.get_all_areas():
-            areas.append({
-                "id": area.id,
-                "bounds": area.bounds,
-                "name": area.name
-            })
-        return areas
-    
-    @pyqtSlot(str)
-    def debug(self, message):
-        """Debug log from javaScript."""
-        print(f"JS Debug: {message}")
-    
-    @pyqtSlot(result=str)
-    def testConnection(self):
-        """Test function to verify the bridge is working."""
-        print("testConnection called from JavaScript")
-        return "Bridge is working"
-    
-    
-    def _on_area_added(self, area_id):
-        """Handle area added event from the area manager."""
-        area = self.area_manager.get_area(area_id)
-        if area:
-            self.areaAdded.emit(area_id, area.bounds)
-    
-    def _on_area_modified(self, area_id):
-        """Handle area modified event from the area manager."""
-        area = self.area_manager.get_area(area_id)
-        if area:
-            self.areaModified.emit(area_id, area.bounds)
-    
-    def _on_area_removed(self, area_id):
-        """Handle area removed event from the area manager."""
-        self.areaRemoved.emit(area_id)
-    
-    def _on_area_selected(self, area_id):
-        """Handle area selected event from the area manager."""
-        self.areaSelected.emit(area_id)
-    
+        self.map_widget = map_widget
+
+    @pyqtSlot(float, float)
+    def handleMapClick(self, lat, lon):
+        """Handle map click event. Called from JavaScript."""
+        if self.map_widget:
+            self.map_widget.handle_map_click(lat, lon)
+
     @pyqtSlot(bool)
     def setDrawingMode(self, enabled):
         """Set the drawing mode. Called from Python, notifies JavaScript."""

@@ -1,103 +1,98 @@
-// Drawing state variables
-var drawMode = false;
-var drawStart = null;
-var currentRectangle = null;
+// Point drawing mode variables
+let pointDrawModeActive = false;
+let temporaryMarkers = [];
 
-// Main function to toggle drawing mode
-function setDrawMode(enabled) {
-    console.log("setDrawMode called with:", enabled);
-    drawMode = enabled;
+// Set drawing mode for points
+function setPointDrawMode(enabled) {
+    pointDrawModeActive = enabled;
     
-    var mapDiv = document.getElementById('map');
+    // Clear any existing temporary markers
+    clearTemporaryMarkers();
+    
+    // Update cursor style
     if (enabled) {
-        console.log("Enabling draw mode");
-        mapDiv.classList.add('draw-mode-active');
-        
-        // Disable map dragging when in draw mode
-        map.dragging.disable();
-        
-        // Add event listeners for drawing
-        map.on('mousedown', onMouseDown);
-        map.on('mousemove', onMouseMove);
-        map.on('mouseup', onMouseUp);
+        map.getContainer().style.cursor = 'crosshair';
     } else {
-        console.log("Disabling draw mode");
-        mapDiv.classList.remove('draw-mode-active');
-        
-        // Re-enable map dragging
-        map.dragging.enable();
-        
-        // Remove event listeners
-        map.off('mousedown', onMouseDown);
-        map.off('mousemove', onMouseMove);
-        map.off('mouseup', onMouseUp);
-        
-        // Clean up any in-progress drawing
-        if (currentRectangle) {
-            map.removeLayer(currentRectangle);
-            currentRectangle = null;
-        }
+        map.getContainer().style.cursor = '';
     }
 }
 
-// Force drawing mode
-function forceDrawMode(enabled) {
-    if (enabled) {
-        // Force draw mode directly
-        drawMode = true;
-        var mapDiv = document.getElementById('map');
-        mapDiv.classList.add('draw-mode-active');
+// Handle map click events
+map.on('click', function(e) {
+    if (pointDrawModeActive) {
+        // Notify Python code of the click
+        bridge.handleMapClick(e.latlng.lat, e.latlng.lng);
+    }
+});
+
+// Add a temporary marker
+function addTemporaryMarker(lat, lng, label) {
+    var marker = L.marker([lat, lng], {
+        icon: L.divIcon({
+            className: 'map-point-marker',
+            html: `<div>${label}</div>`,
+            iconSize: [20, 20]
+        })
+    }).addTo(map);
+    
+    // Connect points with lines as they're added
+    if (temporaryMarkers.length > 0) {
+        var lastMarker = temporaryMarkers[temporaryMarkers.length - 1];
+        var line = L.polyline([
+            [lastMarker.getLatLng().lat, lastMarker.getLatLng().lng],
+            [lat, lng]
+        ], {
+            color: '#3498db',
+            weight: 2,
+            dashArray: '5, 5',
+            opacity: 0.7
+        }).addTo(map);
         
-        // Disable map dragging
-        if (typeof map !== 'undefined' && map.dragging) {
-            console.log('Disabling map dragging');
-            map.dragging.disable();
-        }
+        // Store line with markers
+        temporaryMarkers.push(line);
+    }
+    
+    temporaryMarkers.push(marker);
+}
+
+// Clear all temporary markers
+function clearTemporaryMarkers() {
+    temporaryMarkers.forEach(marker => {
+        map.removeLayer(marker);
+    });
+    temporaryMarkers = [];
+}
+
+// Show drawing status indicator
+function showDrawingStatus(message) {
+    if (!window.statusOverlay) {
+        window.statusOverlay = L.control({position: 'bottomleft'});
         
-        // Connect events directly
-        if (typeof map !== 'undefined') {
-            console.log('Adding mouse event listeners');
-            map.on('mousedown', function(e) { 
-                console.log('Mouse down event:', e.latlng);
-                if (typeof onMouseDown === 'function') {
-                    onMouseDown(e);
-                }
-            });
-            map.on('mousemove', function(e) {
-                if (typeof onMouseMove === 'function') {
-                    onMouseMove(e);
-                }
-            });
-            map.on('mouseup', function(e) {
-                console.log('Mouse up event:', e.latlng);
-                if (typeof onMouseUp === 'function') {
-                    onMouseUp(e);
-                }
-            });
-        }
+        window.statusOverlay.onAdd = function(map) {
+            this._div = L.DomUtil.create('div', 'map-status-overlay');
+            this._div.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+            this._div.style.color = 'white';
+            this._div.style.padding = '10px';
+            this._div.style.borderRadius = '4px';
+            this._div.style.fontWeight = 'bold';
+            this.update(message);
+            return this._div;
+        };
+        
+        window.statusOverlay.update = function(message) {
+            this._div.innerHTML = message;
+        };
+        
+        window.statusOverlay.addTo(map);
     } else {
-        drawMode = false;
-        var mapDiv = document.getElementById('map');
-        mapDiv.classList.remove('draw-mode-active');
-        
-        // Re-enable map dragging
-        if (typeof map !== 'undefined' && map.dragging) {
-            console.log('Re-enabling map dragging');
-            map.dragging.enable();
-        }
-        
-        // Remove event listeners
-        if (typeof map !== 'undefined') {
-            console.log('Removing mouse event listeners');
-            map.off('mousedown');
-            map.off('mousemove');
-            map.off('mouseup');
-        }
+        window.statusOverlay.update(message);
     }
 }
 
-// Make the functions available globally
-window.setDrawMode = setDrawMode;
-window.forceDrawMode = forceDrawMode;
-
-console.log("Map drawing module loaded");
+// Hide drawing status indicator
+function hideDrawingStatus() {
+    if (window.statusOverlay) {
+        map.removeControl(window.statusOverlay);
+        window.statusOverlay = null;
+    }
+}

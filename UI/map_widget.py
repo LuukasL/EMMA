@@ -3,11 +3,14 @@ from PyQt6.QtWidgets import QVBoxLayout, QFrame, QLabel
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEngineSettings
 from PyQt6.QtWebChannel import QWebChannel
-from PyQt6.QtCore import Qt, QFile, QIODevice
+from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from tile_server import LocalTileServer
 from area_manager import AreaManager, MapBridge
 
 class MapWidget(QFrame):
+    pointAdded = pyqtSignal(int, float, float)
+    rectangleCompleted = pyqtSignal(dict)
+
     """Interactive OpenStreetMap widget using QWebEngineView with local resources"""
     def __init__(self, parent=None, initial_lat=64.185717, initial_lon=27.704128, initial_zoom=15):
         super().__init__(parent)
@@ -80,7 +83,9 @@ class MapWidget(QFrame):
         self.tile_server.start()
 
         # Drawing mode initialization
-        self.draw_mode_active = False
+        self.drawing_points = []
+        self.max_points = 4
+        self.drawing_mode = False
     
     def run_js(self, code):
         """Run Javascript code and print debug info"""
@@ -120,27 +125,27 @@ class MapWidget(QFrame):
                 print(f"JavaScript file not found: {filepath}")
         except Exception as e:
             print(f"Error loading JavaScript file {filepath}: {e}")
-
-
     def toggle_draw_mode(self, enabled):
-        """Enable or disable the drawing mode on the map"""
-        print(f"MapWidget.toggle_draw_mode({enabled})")
-        self.draw_mode_active = enabled
+        """Enable or disable four-point drawing mode"""
+        self.drawing_mode = enabled
         
         # Apply visual feedback
         if enabled:
             self.setStyleSheet("border: 3px solid #27ae60;")
+            # Clear any existing points
+            self.drawing_points = []
+            # Update status indicator
+            self.run_js(f"showDrawingStatus('Click point 1 of {self.max_points}')")
         else:
             self.setStyleSheet("")
+            # Clear status indicator
+            self.run_js("hideDrawingStatus()")
+            
+        # Enable map click events in JavaScript
+        self.run_js(f"setPointDrawMode({str(enabled).lower()})")
         
-        # Run debug utils
-        self.web_view.page().runJavaScript("debugMapState()", 0, lambda result: print(f"Debug result: {result}"))
-        
-        # Toggle drawing mode
-        if enabled:
-            self.web_view.page().runJavaScript("forceDrawMode(true)", 0, lambda result: print(f"Draw mode result: {result}"))
-        else:
-            self.web_view.page().runJavaScript("forceDrawMode(false)", 0, lambda result: print(f"Draw mode result: {result}"))
+        # Update any selection visuals
+        self.run_js("clearTemporaryMarkers()")
         
         
     def set_draw_mode_if_exists(self, function_exists, enabled):
@@ -197,8 +202,94 @@ class MapWidget(QFrame):
         for area_id, area in self.area_manager.areas.items():
             self.add_area_to_map(area_id, area.bounds)
 
-    def add_area_to_map(self, area_id, bounds):
-        """Add an area to the map"""
+    def handle_map_click(self, lat, lon):
+        """Handle when user clicks on map in drawing mode"""
+        if not self.drawing_mode:
+            return
+            
+        # Add point to collection
+        current_point = len(self.drawing_points) + 1
+        self.drawing_points.append((lat, lon))
+        
+        # Emit signal about the new point
+        self.pointAdded.emit(current_point, lat, lon)
+        
+        # Add temporary marker on the map
+        self.run_js(f"addTemporaryMarker({lat}, {lon}, 'Point {current_point}')")
+        
+        # Check if we've collected all points
+        if len(self.drawing_points) >= self.max_points:
+            # Calculate the rectangle that encompasses all points
+            rectangle = self.calculate_rectangle_from_points(self.drawing_points)
+            
+            # Create the rectangle on the map
+            self.add_rectangle_to_map(rectangle)
+            
+            # Save to area manager
+            area_id = self.area_manager.add_area(bounds=rectangle['bounds'])
+            
+            # Emit completion signal
+            self.rectangleCompleted.emit(rectangle)
+            
+            # Exit drawing mode
+            self.toggle_draw_mode(False)
+        else:
+            # Update status for next point
+            next_point = current_point + 1
+            self.run_js(f"showDrawingStatus('Click point {next_point} of {self.max_points}')")
+    
+    def calculate_rectangle_from_points(self, points):
+        """Calculate a rectangle that encompasses all points"""
+        # Find min/max coordinates
+        lats = [p[0] for p in points]
+        lons = [p[1] for p in points]
+        
+        min_lat = min(lats)
+        max_lat = max(lats)
+        min_lon = min(lons)
+        max_lon = max(lons)
+        
+        # Create bounds format expected by area manager
+        bounds = [
+            [min_lat, min_lon],  # Southwest corner
+            [max_lat, max_lon]   # Northeast corner
+        ]
+        
+        # Create rectangle data structure
+        rectangle = {
+            'type': 'rectangle',
+            'bounds': bounds,
+            'points': points,  # Original points for reference
+            'center': [(min_lat + max_lat)/2, (min_lon + max_lon)/2],
+            'dimensions': {
+                'width_km': self.calculate_distance(min_lat, min_lon, min_lat, max_lon),
+                'height_km': self.calculate_distance(min_lat, min_lon, max_lat, min_lon)
+            }
+        }
+        
+        return rectangle
+    
+    def calculate_distance(self, lat1, lon1, lat2, lon2):
+        """Calculate distance in kilometers between two points"""
+        from math import sin, cos, sqrt, atan2, radians
+        
+        # Approximate radius of earth in km
+        R = 6371.0
+        
+        lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+        
+        dlon = lon2 - lon1
+        dlat = lat2 - lat1
+        
+        a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
+        c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        
+        distance = R * c
+        return distance
+        
+    def add_rectangle_to_map(self, rectangle):
+        """Add a rectangle to the map"""
+        bounds = rectangle['bounds']
         js_code = f"""
         (function() {{
             var bounds = {bounds};
@@ -222,9 +313,16 @@ class MapWidget(QFrame):
             
             // Store reference
             if (!window.drawnAreas) window.drawnAreas = {{}};
-            window.drawnAreas["{area_id}"] = rect;
+            var areaId = "area_" + Date.now();
+            window.drawnAreas[areaId] = rect;
             
-            return "Area added to map";
+            // Center map on rectangle
+            map.fitBounds([
+                [sw[0], sw[1]],
+                [ne[0], ne[1]]
+            ]);
+            
+            return areaId;
         }})();
         """
         self.web_view.page().runJavaScript(js_code)

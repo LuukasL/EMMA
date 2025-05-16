@@ -1,4 +1,4 @@
-# Autonomous Defense Drone Control System
+# Autonomous Defence Drone Control System
 
 A specialized control system for autonomous defense drones, optimized for operation in Finnish terrain and climate conditions.
 
@@ -84,7 +84,7 @@ This system is designed specifically for defense applications and contains featu
 ## Contributors
 
 - Luukas Lohilahti - Lead Developer, CEO/CTO
-- Touko Rautiainen- - Electronic Warfare Specialist, Designer
+- Touko Rautiainen- - Electronic Warfare Specialist, Chief Designer
 
 ## License
 

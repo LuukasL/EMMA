@@ -52,14 +52,13 @@ class SideBanner(QFrame):
         """)
         self.layout.addWidget(title_label)
 
-class MissionControlBanner(SideBanner):
-    """Left side banner with mission planning and control elements"""
-    def __init__(self, parent=None):
-        """Initialize the mission control banner with various controls"""
-        super().__init__("Mission Control", parent)
-        self.map_widget = MapWidget()
-        self.draw_mode_active = False
+# Updated section in main_window.py
 
+class MissionControlBanner(SideBanner):
+    """Left side banner with basic mission controls - no area selection"""
+    def __init__(self, parent=None):
+        super().__init__("Mission Control", parent)
+        
         # 1. Mission Selection Section
         self.layout.addWidget(SectionHeader("Mission Setup"))
         
@@ -88,37 +87,7 @@ class MissionControlBanner(SideBanner):
         mission_type_layout.addRow("Mission Type:", self.mission_type_combo)
         self.layout.addLayout(mission_type_layout)
         
-        # 2. Area Selection Controls
-        self.layout.addWidget(SectionHeader("Area Selection"))
-        
-        area_buttons_layout = QHBoxLayout()
-        
-        self.select_area_btn = QPushButton("Select Area")
-        self.select_area_btn.setStyleSheet("""
-            background-color: #27ae60;
-            color: white;
-            padding: 8px;
-            border-radius: 4px;
-        """)
-        self.select_area_btn.clicked.connect(self.toggle_area_selection)
-        area_buttons_layout.addWidget(self.select_area_btn)
-        
-        self.clear_selection_btn = QPushButton("Clear")
-        self.clear_selection_btn.setStyleSheet("""
-            background-color: #7f8c8d;
-            color: white;
-            padding: 8px;
-            border-radius: 4px;
-        """)
-        area_buttons_layout.addWidget(self.clear_selection_btn)
-        
-        self.layout.addLayout(area_buttons_layout)
-        
-        self.area_size_label = QLabel("Area: Not selected")
-        self.area_size_label.setStyleSheet("color: #bdc3c7;")
-        self.layout.addWidget(self.area_size_label)
-        
-        # 3. Drone Assignment
+        # 2. Drone Assignment Section
         self.layout.addWidget(SectionHeader("Drone Assignment"))
         
         drone_form = QFormLayout()
@@ -133,16 +102,7 @@ class MissionControlBanner(SideBanner):
         drone_form.addRow("Select Drone:", self.drone_combo)
         self.layout.addLayout(drone_form)
         
-        self.assign_btn = QPushButton("Assign Mission")
-        self.assign_btn.setStyleSheet("""
-            background-color: #2980b9;
-            color: white;
-            padding: 8px;
-            border-radius: 4px;
-        """)
-        self.layout.addWidget(self.assign_btn)
-        
-        # 4. Execution Controls
+        # 3. Execution Controls Section
         self.layout.addWidget(SectionHeader("Execution"))
         
         self.validate_btn = QPushButton("Validate Mission")
@@ -181,65 +141,6 @@ class MissionControlBanner(SideBanner):
         
         # Add a spacer at the bottom to push everything up
         self.layout.addStretch()
-        
-        self.drawing_status_label = QLabel("")
-        self.drawing_status_label.setStyleSheet("""
-            color: #e74c3c;
-            font-weight: bold;
-            padding: 5px;
-            background-color: #2c3e50;
-            border-radius: 3px;
-        """)
-        self.drawing_status_label.setVisible(False)
-        self.layout.addWidget(self.drawing_status_label)
-
-        if parent and hasattr(parent, 'map_widget'):
-            parent.map_widget.pointAdded.connect(self.on_point_added)
-            parent.map_widget.rectangleCompleted.connect(self.on_rectangle_completed)
-
-
-    def toggle_area_selection(self):
-        """Toggle the area selection mode on or off"""
-        if hasattr(self, 'draw_mode_active'):
-            self.draw_mode_active = not self.draw_mode_active
-        else:
-            self.draw_mode_active = True
-
-        if self.draw_mode_active:
-            self.select_area_btn.setStyleSheet("""
-                background-color: #c0392b;
-                color: white;
-                padding: 8px;
-                border-radius: 4px;
-            """)
-            self.select_area_btn.setText("Cancel Selection")
-        else:
-            self.select_area_btn.setStyleSheet("""
-                background-color: #27ae60;
-                color: white;
-                padding: 8px;
-                border-radius: 4px;
-            """)
-            self.select_area_btn.setText("Select Area")
-        if self.parent() and hasattr(self.parent(), 'map_widget'):
-            self.parent().map_widget.toggle_draw_mode(self.draw_mode_active)
-    
-    def on_point_added(self, point_num, lat, lon):
-        """Update the UI when a point is added to the drawing"""
-        self.drawing_status_label.setText(f"Point {point_num} added at {lat:.6f}, {lon:.6f}")
-        self.drawing_status_label.setVisible(True)
-    
-    def on_rectangle_completed(self, rectangle):
-        """Update the UI when a rectangle is completed"""
-        width = rectangle['dimensions']['width_km']
-        height = rectangle['dimensions']['height_km']
-        area = width * height
-        
-        # Show area information
-        self.area_size_label.setText(f"Area: {area:.2f} km² ({width:.1f} × {height:.1f} km)")
-        
-        # Clear drawing status
-        self.drawing_status_label.setVisible(False)
 
 
 class MainWindow(QMainWindow):
@@ -264,10 +165,7 @@ class MainWindow(QMainWindow):
         self.left_banner = MissionControlBanner(parent=self)
         main_layout.addWidget(self.left_banner)
         
-        # Create the map widget
-        self.map_widget = MapWidget()
-
-        # Set location
+        # Create the map widget - simplified
         self.map_widget = MapWidget(
             parent=self,
             initial_lat=64.185717,
@@ -296,9 +194,8 @@ class MainWindow(QMainWindow):
             }
         """)
         
-        
     def resizeEvent(self, event):
-        """Handle window resize to maintain layout proportions"""
+        """Handle window resize"""
         super().resizeEvent(event)
         print(f"Window resized to: {self.width()}x{self.height()}")
 
@@ -308,7 +205,6 @@ class MainWindow(QMainWindow):
             self.map_widget.tile_server.stop()
             self.map_widget.tile_server.wait()
         super().closeEvent(event)
-
 # For testing the layout
 if __name__ == "__main__":
     app = QApplication(sys.argv)

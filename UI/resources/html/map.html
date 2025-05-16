@@ -4,41 +4,34 @@
     <title>Drone Control Map</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="http://localhost:{{SERVER_PORT}}/leaflet/leaflet.css" />
-    <script src="http://localhost:{{SERVER_PORT}}/leaflet/leaflet.js"></script>
-    <script src="http://localhost:{{SERVER_PORT}}/js/qwebchannel.js"></script>
-    <script src="../js/map_drawing.js"></script>
+    <link rel="stylesheet" href="/resources/css/leaflet.css" />
+    <script src="/resources/js/leaflet.js"></script>
     <style>
         body { margin: 0; padding: 0; }
         #map { width: 100%; height: 100vh; background: #2c3e50; }
-        .draw-mode-active { cursor: crosshair; }
     </style>
 </head>
 <body>
     <div id="map"></div>
     <script>
-        console.log("Map initialization starting");
-          // Initialize the map
-        var map = L.map('map').setView([INITIAL_LAT_PLACEHOLDER, INITIAL_LON_PLACEHOLDER], INITIAL_ZOOM_PLACEHOLDER);
-        L.tileLayer('http://localhost:{{SERVER_PORT}}/tiles/TOPO/{z}/{x}/{y}.png').addTo(map);
-        
-        new QWebChannel(qt.webChannelTransport, function(channel) {
-            window.mapChannel = channel;
-            console.log("Map channel initialized");
+        // Wait for Leaflet to be available
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("DOM loaded, checking for Leaflet");
+            
+            function initMap() {
+                if (typeof L !== 'undefined') {
+                    console.log("Leaflet found, initializing map");
+                    var map = L.map('map').setView([INITIAL_LAT_PLACEHOLDER, INITIAL_LON_PLACEHOLDER], INITIAL_ZOOM_PLACEHOLDER);
+                    L.tileLayer('/tiles/TOPO/{z}/{x}/{y}.png').addTo(map);
+                    console.log("Map successfully initialized");
+                } else {
+                    console.error("Leaflet (L) is not defined!");
+                }
+            }
+            
+            // Give a small delay to ensure all resources are loaded
+            setTimeout(initMap, 100);
         });
-
-        // Load drawing functionalitiees from external JS files
-        var script = document.createElement('script');
-        script.src = "http://localhost:{{SERVER_PORT}}/js/map_drawing.js";
-        script.onload = function() {
-            console.log("map_drawing.js loaded");
-        };
-        document.head.appendChild(script);
-
-        // Store map objects
-        window.drawnAreas = {};
-        
-        console.log("Map base initialization complete");
     </script>
 </body>
 </html>

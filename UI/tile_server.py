@@ -118,14 +118,12 @@ class TileRequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(b'Invalid tile request')
                 return
 
-        # Handle Leaflet resources
-        elif '/leaflet/' in self.path:
-            resource_path = self.path.replace('/leaflet/', '')
+        elif '/resources/' in self.path:
+            resource_path = self.path.replace('/resources/', '')
             local_path = os.path.join(self.server.resource_dir, resource_path)
             
             if os.path.exists(local_path):
                 self.send_response(200)
-                # Set the appropriate content type
                 if local_path.endswith('.js'):
                     self.send_header('Content-type', 'application/javascript')
                 elif local_path.endswith('.css'):
@@ -137,26 +135,6 @@ class TileRequestHandler(BaseHTTPRequestHandler):
                 with open(local_path, 'rb') as f:
                     self.wfile.write(f.read())
                 return
-
-        elif '/leaflet-draw/' in self.path:
-            resource_path = self.path.replace('/leaflet-draw/', '')
-            local_path = os.path.join(self.server.resource_dir, resource_path)
-            
-            if os.path.exists(local_path):
-                self.send_response(200)
-                # Set the appropriate content type
-                if local_path.endswith('.js'):
-                    self.send_header('Content-type', 'application/javascript')
-                elif local_path.endswith('.css'):
-                    self.send_header('Content-type', 'text/css')
-                elif local_path.endswith('.png'):
-                    self.send_header('Content-type', 'image/png')
-                self.end_headers()
-                
-                with open(local_path, 'rb') as f:
-                    self.wfile.write(f.read())
-                return
-
         # If we get here, the resource wasn't found
         self.send_response(404)
         self.end_headers()

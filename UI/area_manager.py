@@ -36,50 +36,12 @@ class MissionArea:
         self.modified_at = None  # Could store timestamp
         self.metadata = {}  # For any extra data (terrain info, etc.)
     
-    def set_bounds(self, sw_lat, sw_lng, ne_lat, ne_lng):
-        """Set the bounds of the area using individual coordinates."""
-        self.bounds = [[sw_lat, sw_lng], [ne_lat, ne_lng]]
-    
-    def set_bounds_from_points(self, points):
-        """Set the bounds from an array of points [[lat1, lng1], [lat2, lng2], ...]."""
-        if not points or len(points) < 2:
-            return False
-            
-        # Find the min/max coordinates to make a bounding rectangle
-        lats = [p[0] for p in points]
-        lngs = [p[1] for p in points]
-        
-        sw_lat = min(lats)
-        sw_lng = min(lngs)
-        ne_lat = max(lats)
-        ne_lng = max(lngs)
-        
-        self.bounds = [[sw_lat, sw_lng], [ne_lat, ne_lng]]
-        return True
     
     def get_center(self):
         """Calculate and return the center point of the area."""
         sw, ne = self.bounds
         return [(sw[0] + ne[0]) / 2, (sw[1] + ne[1]) / 2]
     
-    def get_area_km2(self):
-        """Calculate the approximate area in square kilometers."""
-        sw, ne = self.bounds
-        
-        # Calculate width and height in degrees
-        width_deg = abs(ne[1] - sw[1])
-        height_deg = abs(ne[0] - sw[0])
-        
-        # Approximate conversion to kilometers (this is an approximation and varies by latitude)
-        # More accurate calculations would use the haversine formula for each edge
-        center_lat = (sw[0] + ne[0]) / 2
-        km_per_deg_lat = 111.32  # km per degree latitude (roughly constant)
-        km_per_deg_lng = 111.32 * math.cos(math.radians(center_lat))  # km per degree longitude (varies by latitude)
-        
-        width_km = width_deg * km_per_deg_lng
-        height_km = height_deg * km_per_deg_lat
-        
-        return width_km * height_km
     
     def to_dict(self):
         """Convert the area to a dictionary for serialization."""
@@ -126,101 +88,6 @@ class AreaManager(QObject):
         # Currently selected area ID, or None if no selection
         self.selected_area_id = None
     
-    def add_area(self, bounds=None, name=None, area_type="patrol"):
-        """Add a new area with the given bounds and properties"""
-        area_id = f"area_{len(self.areas) + 1}_{int(time.time())}"
-        
-        if name is None:
-            name = f"Area {len(self.areas) + 1}"
-        
-        Area = {
-            "id": area_id,
-            "name": name,
-            "type": area_type,
-            "bounds": bounds,
-            "created": time.time(),
-            "modified": time.time()
-        }
-        
-        self.areas[area_id] = Area(area_id, name, bounds, area_type)
-        self.area_added.emit(area_id)
-        
-        return area_id
-    
-    def save_to_file(self, file_path):
-        """Save all areas to a JSON file"""
-        try:
-            # Prepare data for JSON serialization
-            areas_data = {}
-            for area_id, area in self.areas.items():
-                areas_data[area_id] = {
-                    "id": area.id,
-                    "name": area.name,
-                    "type": area.type,
-                    "bounds": area.bounds,
-                    "center": [
-                        (area.bounds[0][0] + area.bounds[1][0]) / 2,
-                        (area.bounds[0][1] + area.bounds[1][1]) / 2
-                    ],
-                    "dimensions": {
-                        "width_km": self.calculate_width_km(area.bounds),
-                        "height_km": self.calculate_height_km(area.bounds)
-                    }
-                }
-            
-            # Save to file
-            with open(file_path, 'w') as f:
-                json.dump(areas_data, f, indent=2)
-                
-            return True
-        except Exception as e:
-            print(f"Error saving areas: {e}")
-            return False
-
-
-    def calculate_width_km(self, bounds):
-        """Calculate width of bounds in kilometers"""
-        from math import sin, cos, sqrt, atan2, radians
-        
-        # Use southwest and southeast corners
-        lat1, lon1 = bounds[0][0], bounds[0][1]  # Southwest
-        lat2, lon2 = bounds[0][0], bounds[1][1]  # Southeast
-        
-        # Approximate radius of earth in km
-        R = 6371.0
-        
-        lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-        
-        dlon = lon2 - lon1
-        dlat = lat2 - lat1
-        
-        a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
-        c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        
-        distance = R * c
-        return distance
-    
-    def calculate_height_km(self, bounds):
-        """Calculate height of bounds in kilometers"""
-        from math import sin, cos, sqrt, atan2, radians
-        
-        # Use southwest and northwest corners
-        lat1, lon1 = bounds[0][0], bounds[0][1]  # Southwest
-        lat2, lon2 = bounds[1][0], bounds[0][1]  # Northwest
-        
-        # Approximate radius of earth in km
-        R = 6371.0
-        
-        lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-        
-        dlon = lon2 - lon1
-        dlat = lat2 - lat1
-        
-        a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
-        c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        
-        distance = R * c
-        return distance
     
 class MapBridge(QObject):
     """
@@ -230,15 +97,14 @@ class MapBridge(QObject):
     methods for JavaScript to call and signals for JavaScript to listen to.
     """
     
-    # Signals to notify JavaScript of area changes
-    areaAdded = pyqtSignal(str, list)  # area_id, bounds
-    areaModified = pyqtSignal(str, list)  # area_id, bounds
-    areaRemoved = pyqtSignal(str)  # area_id
-    areaSelected = pyqtSignal(str)  # area_id
-    
     # Signal to control drawing mode
     drawingModeChanged = pyqtSignal(bool)  # is_enabled
     
+    markerAdded = pyqtSignal(float, float)
+    rectangleAdded = pyqtSignal(float, float, float, float)
+    polygonAdded = pyqtSignal(str)
+    polylineAdded = pyqtSignal(str)
+    layersDeleted = pyqtSignal()
     def __init__(self, area_manager, map_widget):
         """
         Initialize the map bridge.
@@ -248,12 +114,40 @@ class MapBridge(QObject):
         self.map_widget = map_widget
 
     @pyqtSlot(float, float)
-    def handleMapClick(self, lat, lon):
-        """Handle map click event. Called from JavaScript."""
-        if self.map_widget:
-            self.map_widget.handle_map_click(lat, lon)
-
-    @pyqtSlot(bool)
-    def setDrawingMode(self, enabled):
-        """Set the drawing mode. Called from Python, notifies JavaScript."""
-        self.drawingModeChanged.emit(enabled)
+    def handleMarkerAdded(self, lat, lng):
+        """Handle marker added event from Leaflet Draw"""
+        print(f"Marker added at {lat}, {lng}")
+        self.markerAdded.emit(lat, lng)
+        
+    @pyqtSlot(float, float, float, float)
+    def handleRectangleAdded(self, sw_lat, sw_lng, ne_lat, ne_lng):
+        """Handle rectangle added event from Leaflet Draw"""
+        print(f"Rectangle added: SW({sw_lat}, {sw_lng}), NE({ne_lat}, {ne_lng})")
+        bounds = [
+            [sw_lat, sw_lng],  # Southwest corner
+            [ne_lat, ne_lng]   # Northeast corner
+        ]
+        area_id = self.area_manager.add_area(bounds=bounds)
+        self.rectangleAdded.emit(sw_lat, sw_lng, ne_lat, ne_lng)
+        
+    @pyqtSlot(str)
+    def handlePolygonAdded(self, coords_json):
+        """Handle polygon added event from Leaflet Draw"""
+        import json
+        coords = json.loads(coords_json)
+        print(f"Polygon added with {len(coords)} vertices")
+        self.polygonAdded.emit(coords_json)
+        
+    @pyqtSlot(str)
+    def handlePolylineAdded(self, coords_json):
+        """Handle polyline added event from Leaflet Draw"""
+        import json
+        coords = json.loads(coords_json)
+        print(f"Polyline added with {len(coords)} vertices")
+        self.polylineAdded.emit(coords_json)
+        
+    @pyqtSlot()
+    def handleLayersDeleted(self):
+        """Handle layers deleted event from Leaflet Draw"""
+        print("Layers deleted")
+        self.layersDeleted.emit()

@@ -3,9 +3,11 @@ from PyQt6.QtWidgets import QVBoxLayout, QFrame, QLabel
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEngineSettings
 from PyQt6.QtWebChannel import QWebChannel
-from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QUrl, QTimer
 from tile_server import LocalTileServer
 from area_manager import AreaManager, MapBridge
+import time
+
 
 class MapWidget(QFrame):
     pointAdded = pyqtSignal(int, float, float)
@@ -22,7 +24,6 @@ class MapWidget(QFrame):
         self.initial_lon = initial_lon
         self.initial_zoom = initial_zoom
         
-
         # Create area manager
         self.area_manager = AreaManager(self)
 
@@ -84,14 +85,201 @@ class MapWidget(QFrame):
 
         # Drawing mode initialization
         self.drawing_points = []
+        self.all_clicks = []
         self.max_points = 4
         self.drawing_mode = False
-    
-    def run_js(self, code):
-        """Run Javascript code and print debug info"""
-        print(f"Running JS: {code}")
-        self.web_view.page().runJavaScript(code, 0, lambda result: print(f"JS result: {result if result is not None else 'None'}"))
 
+        self.setup_click_detection()
+
+        self.map_bridge.markerAdded.connect(self.on_marker_added)
+        self.map_bridge.rectangleAdded.connect(self.on_rectangle_added)
+        
+        # Initialize storage
+        self.markers = []
+        self.polygons = []
+        self.polylines = []
+
+        
+    def initialize_leaflet_draw(self):
+        """Initialize Leaflet Draw with QWebChannel communication"""
+        js_code = """
+        // Initialize Leaflet Draw controls
+        if (window.map) {
+            // FeatureGroup to store editable layers
+            window.drawnItems = new L.FeatureGroup();
+            map.addLayer(window.drawnItems);
+            
+            // Initialize the draw control
+            window.drawControl = new L.Control.Draw({
+                edit: {
+                    featureGroup: window.drawnItems
+                },
+                draw: {
+                    polygon: {
+                        allowIntersection: false,
+                        showArea: true
+                    },
+                    rectangle: true,
+                    marker: true,
+                    polyline: true,
+                    circle: false,
+                    circlemarker: false
+                }
+            });
+            map.addControl(window.drawControl);
+            
+            // Handle created items - use bridge to communicate with Python
+            map.on(L.Draw.Event.CREATED, function(event) {
+                var layer = event.layer;
+                var type = event.layerType;
+                
+                // Add to feature group
+                window.drawnItems.addLayer(layer);
+                
+                // Get geometry data based on type
+                if (type === 'marker') {
+                    var latlng = layer.getLatLng();
+                    // Use bridge to call Python
+                    if (window.bridge) {
+                        window.bridge.handleMarkerAdded(latlng.lat, latlng.lng);
+                    }
+                } 
+                else if (type === 'rectangle') {
+                    var bounds = layer.getBounds();
+                    var sw = bounds.getSouthWest();
+                    var ne = bounds.getNorthEast();
+                    // Use bridge to call Python
+                    if (window.bridge) {
+                        window.bridge.handleRectangleAdded(
+                            sw.lat, sw.lng, 
+                            ne.lat, ne.lng
+                        );
+                    }
+                }
+                else if (type === 'polygon') {
+                    var coords = layer.getLatLngs()[0].map(function(latlng) {
+                        return [latlng.lat, latlng.lng];
+                    });
+                    // Use bridge to call Python
+                    if (window.bridge) {
+                        window.bridge.handlePolygonAdded(JSON.stringify(coords));
+                    }
+                }
+                else if (type === 'polyline') {
+                    var coords = layer.getLatLngs().map(function(latlng) {
+                        return [latlng.lat, latlng.lng];
+                    });
+                    // Use bridge to call Python
+                    if (window.bridge) {
+                        window.bridge.handlePolylineAdded(JSON.stringify(coords));
+                    }
+                }
+            });
+            
+            // Handle deleted items
+            map.on(L.Draw.Event.DELETED, function(event) {
+                var layers = event.layers;
+                if (window.bridge) {
+                    window.bridge.handleLayersDeleted();
+                }
+            });
+            
+            console.log('Leaflet Draw initialized with QWebChannel');
+        }
+        """
+        self.web_view.page().runJavaScript(js_code)
+
+    def setup_click_detection(self):
+        js_code = """
+        // Set up click handling
+        if (!window.droneClickHandler) {
+            window.droneClickPoints = [];
+            window.droneClickHandled = true;
+            
+            window.droneClickHandler = function(e) {
+                window.droneClickPoints.push({
+                    lat: e.latlng.lat,
+                    lng: e.latlng.lng,
+                    time: Date.now()
+                });
+                console.log("Click recorded at:", e.latlng.lat, e.latlng.lng);
+            };
+            
+            // Add click handler to map when it's available
+            if (window.map) {
+                window.map.on('click', window.droneClickHandler);
+                console.log("Click handler attached to map");
+            } else {
+                console.log("Map not yet available");
+                // Use interval to wait for map to be available
+                var mapCheckInterval = setInterval(function() {
+                    if (window.map) {
+                        window.map.on('click', window.droneClickHandler);
+                        console.log("Click handler attached to map");
+                        clearInterval(mapCheckInterval);
+                    }
+                }, 100);
+            }
+        }
+        """
+        
+        self.click_timer = QTimer(self)
+        self.click_timer.timeout.connect(self.check_for_clicks)
+        self.click_timer.start(100)  # Check every 100ms
+        self.web_view.loadFinished.connect(lambda: self.web_view.page().runJavaScript(js_code))
+
+    def check_for_clicks(self):
+
+        js_code = """
+        var clicks = window.droneClickPoints || [];
+        window.droneClickPoints = [];
+        clicks;
+        """
+        self.web_view.page().runJavaScript(js_code, 0, self.process_clicks)
+
+    def process_clicks(self, clicks):
+        """Process clicks received from JavaScript"""
+        if clicks and len(clicks) > 0:
+            for click in clicks:
+                lat = click.get('lat', 0)
+                lng = click.get('lng', 0)
+                
+                # Store all clicks for reference
+                self.all_clicks.append({
+                    'lat': lat,
+                    'lng': lng,
+                    'timestamp': click.get('time', 0)
+                })
+                
+                # Add a marker for this click (regardless of drawing mode)
+                marker_id = f"click_{len(self.all_clicks)}"
+                self.add_marker_to_map(lat, lng, marker_id)
+
+                # Process the click for drawing mode
+                self.handle_map_click(lat, lng)
+                print(f"Processing click at {lat}, {lng}")
+
+    def add_marker_to_map(self, lat, lng, marker_id):
+        """Add a marker at the specified coordinates"""
+        js_code = f"""
+        (function() {{
+            var marker = L.marker([{lat}, {lng}], {{
+                icon: L.divIcon({{
+                    className: 'map-marker',
+                    html: '<div class="marker-dot"></div>',
+                    iconSize: [10, 10]
+                }})
+            }}).addTo(map);
+            
+            // Store reference for later manipulation
+            if (!window.mapMarkers) window.mapMarkers = {{}};
+            window.mapMarkers['{marker_id}'] = marker;
+        }})();
+        """
+        self.web_view.page().runJavaScript(js_code)
+
+
+    
     def on_server_started(self, port):
         """Called when the local tile server is ready"""
         if not port:
@@ -109,7 +297,6 @@ class MapWidget(QFrame):
             js_dir = os.path.join(self.app_dir,'resources', 'js')
 
             self.load_javascript(os.path.join(js_dir, 'map_utils.js'))
-            self.load_javascript(os.path.join(js_dir, 'map_events.js'))
             self.load_javascript(os.path.join(js_dir, 'map_drawing.js'))
 
     def load_javascript(self, filepath):
@@ -125,47 +312,45 @@ class MapWidget(QFrame):
                 print(f"JavaScript file not found: {filepath}")
         except Exception as e:
             print(f"Error loading JavaScript file {filepath}: {e}")
-    def toggle_draw_mode(self, enabled):
-        """Enable or disable four-point drawing mode"""
-        self.drawing_mode = enabled
-        
-        # Apply visual feedback
-        if enabled:
-            self.setStyleSheet("border: 3px solid #27ae60;")
-            # Clear any existing points
-            self.drawing_points = []
-            # Update status indicator
-            self.run_js(f"showDrawingStatus('Click point 1 of {self.max_points}')")
-        else:
-            self.setStyleSheet("")
-            # Clear status indicator
-            self.run_js("hideDrawingStatus()")
-            
-        # Enable map click events in JavaScript
-        self.run_js(f"setPointDrawMode({str(enabled).lower()})")
-        
-        # Update any selection visuals
-        self.run_js("clearTemporaryMarkers()")
-        
-        
-    def set_draw_mode_if_exists(self, function_exists, enabled):
-        """Called after checking if setDrawMode exists"""
-        if function_exists:
-            print(f"setDrawMode function exists, calling with {enabled}")
-            js_code = f"setDrawMode({str(enabled).lower()})"
-            self.run_js(js_code)
-        else:
-            print("ERROR: setDrawMode function not defined in JavaScript.")
-            self.run_js("console.log('Available functions: ', Object.keys(window))")
+
+
+    def on_marker_added(self, lat, lng):
+        """Handle marker added event"""
+        self.markers.append({
+            'lat': lat,
+            'lng': lng,
+            'time': time.time()  # Correctly using the imported module
+        })
+        # Handle UI updates, etc.
+    
+    def on_rectangle_added(self, sw_lat, sw_lng, ne_lat, ne_lng):
+        """Handle rectangle added event"""
+        rectangle = {
+            'bounds': [
+                [sw_lat, sw_lng],
+                [ne_lat, ne_lng]
+            ]
+        }
+
+
 
     def init_map(self):
         """Initialize the map with local resources"""
         html_path = os.path.join(self.app_dir, 'resources', 'html', 'map.html')
-        
+        qwebchannel_path = os.path.join(self.app_dir, 'resources', 'js', 'qwebchannel.js')
+
         try:
             with open(html_path, 'r') as f:
                 html_template = f.read()
                 
+            with open(qwebchannel_path, 'r') as f:
+                qwebchannel_js = f.read()
+
+
+            html_template = html_template.replace(
+                '<script src=resources/js/qwebchannel.js></script>',
+                f'<script>{qwebchannel_js}</script>' 
+            )
             # Replace placeholders
             html = html_template.replace('INITIAL_LAT_PLACEHOLDER', str(self.initial_lat))
             html = html.replace('INITIAL_LON_PLACEHOLDER', str(self.initial_lon))
@@ -238,55 +423,6 @@ class MapWidget(QFrame):
             next_point = current_point + 1
             self.run_js(f"showDrawingStatus('Click point {next_point} of {self.max_points}')")
     
-    def calculate_rectangle_from_points(self, points):
-        """Calculate a rectangle that encompasses all points"""
-        # Find min/max coordinates
-        lats = [p[0] for p in points]
-        lons = [p[1] for p in points]
-        
-        min_lat = min(lats)
-        max_lat = max(lats)
-        min_lon = min(lons)
-        max_lon = max(lons)
-        
-        # Create bounds format expected by area manager
-        bounds = [
-            [min_lat, min_lon],  # Southwest corner
-            [max_lat, max_lon]   # Northeast corner
-        ]
-        
-        # Create rectangle data structure
-        rectangle = {
-            'type': 'rectangle',
-            'bounds': bounds,
-            'points': points,  # Original points for reference
-            'center': [(min_lat + max_lat)/2, (min_lon + max_lon)/2],
-            'dimensions': {
-                'width_km': self.calculate_distance(min_lat, min_lon, min_lat, max_lon),
-                'height_km': self.calculate_distance(min_lat, min_lon, max_lat, min_lon)
-            }
-        }
-        
-        return rectangle
-    
-    def calculate_distance(self, lat1, lon1, lat2, lon2):
-        """Calculate distance in kilometers between two points"""
-        from math import sin, cos, sqrt, atan2, radians
-        
-        # Approximate radius of earth in km
-        R = 6371.0
-        
-        lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-        
-        dlon = lon2 - lon1
-        dlat = lat2 - lat1
-        
-        a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
-        c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        
-        distance = R * c
-        return distance
-        
     def add_rectangle_to_map(self, rectangle):
         """Add a rectangle to the map"""
         bounds = rectangle['bounds']

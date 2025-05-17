@@ -87,6 +87,22 @@ class MissionControlBanner(SideBanner):
         mission_type_layout.addRow("Mission Type:", self.mission_type_combo)
         self.layout.addLayout(mission_type_layout)
         
+        self.layout.addWidget(SectionHeader("Area setup"))
+        
+        mission_buttons_layout = QHBoxLayout()
+        
+        self.new_mission_btn = QPushButton("New area")
+        self.new_mission_btn.setStyleSheet("""
+            background-color: #ffa200;
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+        """)
+        mission_buttons_layout.addWidget(self.new_mission_btn)
+        
+        self.layout.addLayout(mission_buttons_layout)
+        
+        
         # 2. Drone Assignment Section
         self.layout.addWidget(SectionHeader("Drone Assignment"))
         

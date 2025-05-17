@@ -1,12 +1,9 @@
-# tile_server.py
 import os
 import urllib.request
 import urllib.error
 import threading
-import queue
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import random
-import time
 from PyQt6.QtCore import QThread, pyqtSignal
 
 class TileDownloader:

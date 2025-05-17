@@ -1,4 +1,3 @@
-# area_manager.py - ultra-simplified version (optional)
 from PyQt6.QtCore import QObject
 
 class AreaManager(QObject):

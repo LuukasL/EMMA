@@ -1,4 +1,3 @@
-# map_widget.py - ultra-simplified version
 import os
 from PyQt6.QtWidgets import QVBoxLayout, QFrame, QLabel
 from PyQt6.QtWebEngineWidgets import QWebEngineView

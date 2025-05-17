@@ -1,11 +1,11 @@
 import os
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, 
                              QHBoxLayout, QVBoxLayout, QFrame, QLabel,
-                             QPushButton, QComboBox, QFormLayout, QFileDialog)
+                             QPushButton, QComboBox, QFormLayout)
 from PyQt6.QtCore import Qt
 from map_widget import MapWidget  
 import sys
-
+from map.map_view import MapView
 
 class SectionHeader(QLabel):
     """Custom header for sections in the side banner"""
@@ -182,8 +182,9 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.left_banner)
         
         # Create the map widget - simplified
-        self.map_widget = MapWidget(
+        self.map_widget = MapView(
             parent=self,
+            cache_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cache'),
             initial_lat=64.185717,
             initial_lon=27.704128,
             initial_zoom=15
